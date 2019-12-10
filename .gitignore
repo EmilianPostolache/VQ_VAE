@@ -1,0 +1,16 @@
+# Created by .ignore support plugin (hsz.mobi)
+.idea/.gitignore
+.idea/VQ_VAE_2.iml
+.idea/dictionaries/
+.idea/inspectionProfiles/
+.idea/misc.xml
+.idea/modules.xml
+.idea/other.xml
+.idea/vcs.xml
+exercise/linear_autoencoder.py
+ppca.py
+checkpoints/
+tensorboard/
+test1.py
+test2.py
+tmp/
