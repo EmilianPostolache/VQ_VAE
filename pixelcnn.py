@@ -1,15 +1,12 @@
-# import sys
-
 import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Conv2D
 from tensorflow.keras.utils import Progbar
-# from tensorflow.keras import regularizers
-# from tensorflow.keras.layers import Layer
-# from PIL import Image
+
 from datetime import datetime
 import numpy as np
 from tensorflow.python.ops import array_ops
+from utils import training_step, get_binarized_mnist
 
 
 class MonoMaskedConv2D(Conv2D):
@@ -105,42 +102,34 @@ class PixelCNN(Model):
         for i in range(self.x_size):
             for j in range(self.x_size):
                 logits = self.call(current_sample)
-                prob_cond = tf.nn.sigmoid(logits[0, i, j, 0])
-                current_sample[0, i, j, 0] = self.multinomial_sample([1. - prob_cond, prob_cond])
+                prob_cond = tf.nn.softmax(logits[0, i, j, :])
+                current_sample[0, i, j, 0] = self.multinouli_sample(prob_cond)
                 prog.update(i*self.x_size+j)
         return current_sample
 
     @staticmethod
-    def multinomial_sample(dist):
+    def multinouli_sample(dist):
         dist = np.array(dist)
         dist /= np.sum(dist)
         return np.random.choice(len(dist), p=dist)
 
 
 @tf.function
-def compute_loss(inputs, model):
+def pixelcnn_loss(inputs, model):
     logits = model(inputs)
-    nll = tf.nn.sigmoid_cross_entropy_with_logits(labels=inputs, logits=logits)
-    loss = tf.reduce_sum(nll, axis=[1, 2, 3])
+    inputs = tf.cast(inputs[:, :, :, 0], tf.int32)
+    nll = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=inputs, logits=logits)
+    loss = tf.reduce_sum(nll, axis=[1, 2])
     return tf.reduce_mean(loss)
-
-
-@tf.function
-def training_step(x, model, optimizer):
-    with tf.GradientTape() as tape:
-        loss = compute_loss(x, model)
-    grads = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(grads, model.trainable_variables))
-    return loss
 
 
 if __name__ == '__main__':
     IMAGE_SIZE = 28
     FEATURE_MAPS = 16
-    OUTPUT_MAPS = 1
+    OUTPUT_MAPS = 2
     DEPTH = 4
     EPOCHS = 10
-    BATCH_SIZE = 1000
+    BATCH_SIZE = 1024
     BUFFER_SIZE = 60000
 
     now = datetime.now()
@@ -148,53 +137,34 @@ if __name__ == '__main__':
     SAVE_FILE = './checkpoints/pixelcnn_' + timestamp
     TENSORBOARD_DIR = './tensorboard/' + timestamp
 
-    file_writer = tf.summary.create_file_writer(TENSORBOARD_DIR)
-
-    # dataset
-    (x_train, _), (x_test, _) = tf.keras.datasets.mnist.load_data()
-    x_train = x_train[..., np.newaxis].astype('float32')
-    x_test = x_test[..., np.newaxis].astype('float32')
-
-    # we have to perform quantization of the pixels
-
-    x_train /= 255.
-    x_test /= 255.
-
-    x_train[x_train >= 0.5] = 1
-    x_train[x_train < 0.5] = 0
-    x_test[x_test >= 0.5] = 1
-    x_test[x_test < 0.5] = 0
-
-    train_dataset = tf.data.Dataset.from_tensor_slices(x_train).batch(BATCH_SIZE)
-    test_dataset = tf.data.Dataset.from_tensor_slices(x_test).batch(BATCH_SIZE)
+    # file_writer = tf.summary.create_file_writer(TENSORBOARD_DIR)
+    train_dataset, test_dataset, train_size, _ = get_binarized_mnist(BATCH_SIZE, BUFFER_SIZE)
 
     pixel_cnn = PixelCNN(IMAGE_SIZE, DEPTH, FEATURE_MAPS, OUTPUT_MAPS)
     adam = tf.keras.optimizers.Adam()
     loss_mean = tf.keras.metrics.Mean()
 
     for epoch in range(1, EPOCHS + 1):
-        prog = Progbar(x_train.shape[0] / BATCH_SIZE)
+        prog = Progbar(train_size / BATCH_SIZE)
 
         # train
         for step, input in enumerate(train_dataset):
-            loss = training_step(input, pixel_cnn, adam)
-
+            loss = training_step(input, pixel_cnn, adam, pixelcnn_loss)
             logits = pixel_cnn(input)
-            with file_writer.as_default():
-                tf.summary.image('input', input[0][tf.newaxis, ...], step=step+1)
-                tf.summary.histogram('input_hist', input[0, :, :, 0], step=step+1)
-                tf.summary.image('prob', tf.nn.sigmoid(logits)[0][tf.newaxis, ...], step=step+1)
-                tf.summary.histogram('prob_hist', tf.nn.sigmoid(logits)[0, :, :, 0], step=step+1)
-
+            # with file_writer.as_default():
+            #    tf.summary.image('input', input[0][tf.newaxis, ...], step=step+1)
+            #    tf.summary.histogram('input_hist', input[0, :, :, 0], step=step+1)
+            #    tf.summary.image('prob', tf.nn.sigmoid(logits)[0][tf.newaxis, ...], step=step+1)
+            #    tf.summary.histogram('prob_hist', tf.nn.sigmoid(logits)[0, :, :, 0], step=step+1)
             prog.update(step, [('loss', loss)])
 
         # test
         for input in test_dataset:
-            loss_mean(compute_loss(input, pixel_cnn))
+            loss_mean(pixelcnn_loss(input, pixel_cnn))
         print(f'\nEpoch {epoch} - NLL loss: {loss_mean.result().numpy()}')
         loss_mean.reset_states()
 
-        sample = pixel_cnn.sample()
-        with file_writer.as_default():
-            tf.summary.image('sample', sample, step=epoch)
-            tf.summary.histogram('sample_hist', sample, step=epoch)
+        # sample = pixel_cnn.sample()
+        # with file_writer.as_default():
+        #     tf.summary.image('sample', sample, step=epoch)
+        #     tf.summary.histogram('sample_hist', sample, step=epoch)
