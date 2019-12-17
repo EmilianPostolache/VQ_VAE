@@ -138,30 +138,37 @@ if __name__ == '__main__':
     TENSORBOARD_DIR = './tensorboard/' + timestamp
 
     # file_writer = tf.summary.create_file_writer(TENSORBOARD_DIR)
-    train_dataset, test_dataset, train_size, _ = get_binarized_mnist(BATCH_SIZE, BUFFER_SIZE)
+    train_dataset, test_dataset, train_size, test_size = get_binarized_mnist(BATCH_SIZE, BUFFER_SIZE)
 
     pixel_cnn = PixelCNN(IMAGE_SIZE, DEPTH, FEATURE_MAPS, OUTPUT_MAPS)
     adam = tf.keras.optimizers.Adam()
     loss_mean = tf.keras.metrics.Mean()
 
     for epoch in range(1, EPOCHS + 1):
-        prog = Progbar(train_size / BATCH_SIZE)
+        print(f'\nPixelCNN - Epoch {epoch}')
 
         # train
+        prog = Progbar(train_size / BATCH_SIZE)
         for step, input in enumerate(train_dataset):
             loss = training_step(input, pixel_cnn, adam, pixelcnn_loss)
-            logits = pixel_cnn(input)
+            # logits = pixel_cnn(input)
             # with file_writer.as_default():
             #    tf.summary.image('input', input[0][tf.newaxis, ...], step=step+1)
             #    tf.summary.histogram('input_hist', input[0, :, :, 0], step=step+1)
             #    tf.summary.image('prob', tf.nn.sigmoid(logits)[0][tf.newaxis, ...], step=step+1)
             #    tf.summary.histogram('prob_hist', tf.nn.sigmoid(logits)[0, :, :, 0], step=step+1)
+            loss_mean(loss)
             prog.update(step, [('loss', loss)])
+        print(f'Train loss: {loss_mean.result().numpy()}')
+        loss_mean.reset_states()
 
         # test
-        for input in test_dataset:
-            loss_mean(pixelcnn_loss(input, pixel_cnn))
-        print(f'\nEpoch {epoch} - NLL loss: {loss_mean.result().numpy()}')
+        prog = Progbar(train_size / BATCH_SIZE)
+        for step, input in enumerate(test_dataset):
+            loss = pixelcnn_loss(input, pixel_cnn)
+            loss_mean(loss)
+            prog.update(step, [('loss', loss)])
+        print(f'Test loss: {loss_mean.result().numpy()}')
         loss_mean.reset_states()
 
         # sample = pixel_cnn.sample()

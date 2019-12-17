@@ -78,7 +78,7 @@ class VQVAE(Model):
         self.vq = VectorQuantization(k)
         self.decoder = Decoder(1, hidden_layers=[32, 16])
         # PixelCNN dimension is latent dimension: 7
-        self.pixelcnn = PixelCNN(7, 4, 16, d)
+        self.pixelcnn = PixelCNN(7, 4, 16, k)
 
     def call(self, inputs, **kwargs):
         z_e = self.encoder(inputs)
@@ -99,8 +99,6 @@ class VQVAE(Model):
 def vqvae_loss(input, model, beta=0.25):
     logits, z_e, z_q, _ = model(input)
 
-    print('z_e', z_e.shape)
-    print('z_q', z_q.shape)
     # log p(x|z_q) reconstruction loss
     cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(input, logits)
     logp_x_z = tf.reduce_sum(cross_entropy, axis=[1, 2, 3])
@@ -118,7 +116,7 @@ def vqvae_loss(input, model, beta=0.25):
 if __name__ == '__main__':
 
     IMAGE_SIZE = 28
-    EPOCHS_VQVAE = 10
+    EPOCHS_VQVAE = 0
     EPOCHS_PIXELCNN = 10
     BATCH_SIZE = 1024
     BUFFER_SIZE = 60000
@@ -132,41 +130,55 @@ if __name__ == '__main__':
     TENSORBOARD_DIR = './tensorboard/' + timestamp
 
     file_writer = tf.summary.create_file_writer(TENSORBOARD_DIR)
-    train_dataset, test_dataset, train_size, _ = get_binarized_mnist(BATCH_SIZE, BUFFER_SIZE)
+    train_dataset, test_dataset, train_size, test_size = get_binarized_mnist(BATCH_SIZE, BUFFER_SIZE)
 
     vqvae = VQVAE(D, K)
     adam = tf.keras.optimizers.Adam()
     loss_mean = tf.keras.metrics.Mean()
 
     for epoch in range(1, EPOCHS_VQVAE + 1):
-        prog = Progbar(train_size / BATCH_SIZE)
+        print(f'\nVQVAE - Epoch {epoch}')
 
         # train
+        prog = Progbar(train_size / BATCH_SIZE)
         for step, input in enumerate(train_dataset):
             loss = training_step(input, vqvae, adam, vqvae_loss)
+            loss_mean(loss)
             prog.update(step, [('loss', loss)])
+        print(f'\nTrain loss: {loss_mean.result().numpy()}')
+        loss_mean.reset_states()
 
         # test
-        for input in test_dataset:
-            loss_mean(vqvae_loss(input, vqvae))
-        print(f'\nVQVAE - Epoch {epoch} - Test NLL loss: {loss_mean.result().numpy()}')
+        prog = Progbar(train_size / BATCH_SIZE)
+        for step, input in enumerate(test_dataset):
+            loss = vqvae_loss(input, vqvae)
+            loss_mean(loss)
+            prog.update(step, [('loss', loss)])
+        print(f'\nTest loss: {loss_mean.result().numpy()}')
         loss_mean.reset_states()
 
     # then you have to train pixelcnn
+    adam = tf.keras.optimizers.Adam()
     for epoch in range(1, EPOCHS_PIXELCNN + 1):
-        prog = Progbar(train_size / BATCH_SIZE)
+        print(f'\nPixelCNN - Epoch {epoch}')
 
         # train
+        prog = Progbar(train_size / BATCH_SIZE)
         for step, input in enumerate(train_dataset):
             _, _, _, q_z = vqvae(input)
-            q_z = q_z[..., tf.newaxis]
+            q_z = tf.cast(q_z[..., tf.newaxis], tf.float32)
             loss = training_step(q_z, vqvae.pixelcnn, adam, pixelcnn_loss)
             prog.update(step, [('loss', loss)])
+        print(f'\nTrain loss: {loss_mean.result().numpy()}')
+        loss_mean.reset_states()
 
         # test
-        for input in test_dataset:
+        prog = Progbar(test_size / BATCH_SIZE)
+        for step, input in enumerate(test_dataset):
             _, _, _, q_z = vqvae(input)
-            q_z = q_z[..., tf.newaxis]
-            loss_mean(pixelcnn_loss(q_z, vqvae.pixelcnn))
-        print(f'\nPixelCNN - Epoch {epoch} - Test NLL loss: {loss_mean.result().numpy()}')
+            q_z = tf.cast(q_z[..., tf.newaxis], tf.float32)
+            loss = pixelcnn_loss(q_z, vqvae.pixelcnn)
+            prog.update(step, [('loss', loss)])
+            loss_mean()
+        print(f'\nTest loss: {loss_mean.result().numpy()}')
         loss_mean.reset_states()
