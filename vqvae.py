@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Layer
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose
 from tensorflow.keras import Model
-from tensorflow_core.python.keras.utils import Progbar
+from tensorflow.keras.utils import Progbar
 
 from pixelcnn import PixelCNN, pixelcnn_loss
 from utils import training_step, get_binarized_mnist
@@ -145,7 +145,7 @@ if __name__ == '__main__':
             loss = training_step(input, vqvae, adam, vqvae_loss)
             loss_mean(loss)
             prog.update(step, [('loss', loss)])
-        print(f'\nTrain loss: {loss_mean.result().numpy()}')
+        print(f'Train loss: {loss_mean.result().numpy()}')
         loss_mean.reset_states()
 
         # test
@@ -154,7 +154,7 @@ if __name__ == '__main__':
             loss = vqvae_loss(input, vqvae)
             loss_mean(loss)
             prog.update(step, [('loss', loss)])
-        print(f'\nTest loss: {loss_mean.result().numpy()}')
+        print(f'Test loss: {loss_mean.result().numpy()}')
         loss_mean.reset_states()
 
     # then you have to train pixelcnn
@@ -169,7 +169,7 @@ if __name__ == '__main__':
             q_z = tf.cast(q_z[..., tf.newaxis], tf.float32)
             loss = training_step(q_z, vqvae.pixelcnn, adam, pixelcnn_loss)
             prog.update(step, [('loss', loss)])
-        print(f'\nTrain loss: {loss_mean.result().numpy()}')
+        print(f'Train loss: {loss_mean.result().numpy()}')
         loss_mean.reset_states()
 
         # test
@@ -180,5 +180,5 @@ if __name__ == '__main__':
             loss = pixelcnn_loss(q_z, vqvae.pixelcnn)
             prog.update(step, [('loss', loss)])
             loss_mean()
-        print(f'\nTest loss: {loss_mean.result().numpy()}')
+        print(f'Test loss: {loss_mean.result().numpy()}')
         loss_mean.reset_states()
