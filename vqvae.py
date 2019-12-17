@@ -3,6 +3,8 @@ from tensorflow.keras.layers import Layer
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose
 from tensorflow.keras import Model
 
+from pixelcnn import PixelCNN
+
 
 class VectorQuantization(Layer):
     def __init__(self, k, **kwargs):
@@ -23,12 +25,13 @@ class VectorQuantization(Layer):
         index = tf.argmin(norm, axis=-1)
         return index
 
-    @staticmethod
-    def sample(q_z):
+    def sample(self, q_z):
         one_hot = tf.one_hot(q_z)
-
-
-        return one_hot
+        one_hot = one_hot[..., tf.newaxis, :]
+        cb = tf.transpose(self.codebook)
+        cb = tf.reshape(cb, (1, 1, 1, self.d, self.k))
+        sample = tf.reduce_sum(cb * one_hot, axis=-1)
+        return sample
 
 
 class Encoder(Model):
@@ -67,6 +70,7 @@ class VQVAE(Model):
         self.encoder = Encoder(d, hidden_layers=[16, 32])
         self.vq = VectorQuantization(k)
         self.decoder = Decoder(1, hidden_layers=[32, 16])
+        self.pixelcnn = PixelCNN(28, 4, 16, 2)
 
     def call(self, inputs, **kwargs):
         z_e = self.encoder(inputs)
@@ -76,10 +80,14 @@ class VQVAE(Model):
         x = self.decoder(z_q)
         return x
 
+    def sample(self):
+        self.
+
+
 
 @tf.function
 def compute_loss(input, model):
-    ...
+    
 
 
 if __name__ == '__main__':
