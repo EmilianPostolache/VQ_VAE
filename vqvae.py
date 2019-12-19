@@ -1,13 +1,9 @@
-from datetime import datetime
-
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose
 from tensorflow.keras import Model
-from tensorflow.keras.utils import Progbar
 
-from pixelcnn import PixelCNN, pixelcnn_loss
-from utils import training_step, get_binarized_mnist
+from pixelcnn import PixelCNN
 
 
 class VectorQuantization(Layer):
@@ -90,9 +86,11 @@ class VQVAE(Model):
 
     def sample(self):
         q_z = self.pixelcnn.sample()
+        q_z = tf.cast(q_z, tf.int32)
+        q_z = q_z[:, :, :, 0]
         z_q = self.vq.sample(q_z)
         logits = self.decoder(z_q)
-        return tf.nn.softmax(logits)
+        return tf.nn.sigmoid(logits)
 
 
 @tf.function
@@ -111,74 +109,3 @@ def vqvae_loss(input, model, beta=0.25):
     commitment_loss = tf.norm(z_e - tf.stop_gradient(z_q), axis=-1) ** 2
     commitment_loss = tf.reduce_sum(commitment_loss, axis=[1, 2])
     return tf.reduce_mean(logp_x_z + vq_loss + beta*commitment_loss)
-
-
-if __name__ == '__main__':
-
-    IMAGE_SIZE = 28
-    EPOCHS_VQVAE = 0
-    EPOCHS_PIXELCNN = 10
-    BATCH_SIZE = 1024
-    BUFFER_SIZE = 60000
-    D = 64
-    K = 100
-    BETA = 0.25
-
-    now = datetime.now()
-    timestamp = str(now.strftime("%Y%m%d_%H-%M-%S"))
-    SAVE_FILE = './checkpoints/vqvae_' + timestamp
-    TENSORBOARD_DIR = './tensorboard/' + timestamp
-
-    file_writer = tf.summary.create_file_writer(TENSORBOARD_DIR)
-    train_dataset, test_dataset, train_size, test_size = get_binarized_mnist(BATCH_SIZE, BUFFER_SIZE)
-
-    vqvae = VQVAE(D, K)
-    adam = tf.keras.optimizers.Adam()
-    loss_mean = tf.keras.metrics.Mean()
-
-    for epoch in range(1, EPOCHS_VQVAE + 1):
-        print(f'\nVQVAE - Epoch {epoch}')
-
-        # train
-        prog = Progbar(train_size / BATCH_SIZE)
-        for step, input in enumerate(train_dataset):
-            loss = training_step(input, vqvae, adam, vqvae_loss)
-            loss_mean(loss)
-            prog.update(step, [('loss', loss)])
-        print(f'Train loss: {loss_mean.result().numpy()}')
-        loss_mean.reset_states()
-
-        # test
-        prog = Progbar(train_size / BATCH_SIZE)
-        for step, input in enumerate(test_dataset):
-            loss = vqvae_loss(input, vqvae)
-            loss_mean(loss)
-            prog.update(step, [('loss', loss)])
-        print(f'Test loss: {loss_mean.result().numpy()}')
-        loss_mean.reset_states()
-
-    # then you have to train pixelcnn
-    adam = tf.keras.optimizers.Adam()
-    for epoch in range(1, EPOCHS_PIXELCNN + 1):
-        print(f'\nPixelCNN - Epoch {epoch}')
-
-        # train
-        prog = Progbar(train_size / BATCH_SIZE)
-        for step, input in enumerate(train_dataset):
-            _, _, _, q_z = vqvae(input)
-            q_z = tf.cast(q_z[..., tf.newaxis], tf.float32)
-            loss = training_step(q_z, vqvae.pixelcnn, adam, pixelcnn_loss)
-            prog.update(step, [('loss', loss)])
-        print(f'Train loss: {loss_mean.result().numpy()}')
-        loss_mean.reset_states()
-
-        # test
-        prog = Progbar(test_size / BATCH_SIZE)
-        for step, input in enumerate(test_dataset):
-            _, _, _, q_z = vqvae(input)
-            q_z = tf.cast(q_z[..., tf.newaxis], tf.float32)
-            loss = pixelcnn_loss(q_z, vqvae.pixelcnn)
-            prog.update(step, [('loss', loss)])
-            loss_mean()
-        print(f'Test loss: {loss_mean.result().numpy()}')
-        loss_mean.reset_states()

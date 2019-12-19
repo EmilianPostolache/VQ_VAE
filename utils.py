@@ -22,9 +22,12 @@ def get_binarized_mnist(batch_size, buffer_size):
 
 
 @tf.function
-def training_step(x, model, optimizer, loss_function):
-    with tf.GradientTape() as tape:
-        loss = loss_function(x, model)
-    grads = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(grads, model.trainable_variables))
-    return loss
+def run(model):
+    return model(tf.zeros((1, 28, 28, 1)))
+
+
+def profile(model, file_writer, profiler_outdir):
+    tf.summary.trace_on(graph=True, profiler=True)
+    run(model)
+    with file_writer.as_default():
+        tf.summary.trace_export(name="model_trace", step=0, profiler_outdir=profiler_outdir)

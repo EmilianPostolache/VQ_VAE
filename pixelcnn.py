@@ -1,12 +1,13 @@
+# from datetime import datetime
+
 import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Conv2D
 from tensorflow.keras.utils import Progbar
 
-from datetime import datetime
 import numpy as np
 from tensorflow.python.ops import array_ops
-from utils import training_step, get_binarized_mnist
+# from utils import training_step, get_binarized_mnist
 
 
 class MonoMaskedConv2D(Conv2D):
@@ -123,55 +124,55 @@ def pixelcnn_loss(inputs, model):
     return tf.reduce_mean(loss)
 
 
-if __name__ == '__main__':
-    IMAGE_SIZE = 28
-    FEATURE_MAPS = 16
-    OUTPUT_MAPS = 2
-    DEPTH = 4
-    EPOCHS = 10
-    BATCH_SIZE = 1024
-    BUFFER_SIZE = 60000
-
-    now = datetime.now()
-    timestamp = str(now.strftime("%Y%m%d_%H-%M-%S"))
-    SAVE_FILE = './checkpoints/pixelcnn_' + timestamp
-    TENSORBOARD_DIR = './tensorboard/' + timestamp
-
-    # file_writer = tf.summary.create_file_writer(TENSORBOARD_DIR)
-    train_dataset, test_dataset, train_size, test_size = get_binarized_mnist(BATCH_SIZE, BUFFER_SIZE)
-
-    pixel_cnn = PixelCNN(IMAGE_SIZE, DEPTH, FEATURE_MAPS, OUTPUT_MAPS)
-    adam = tf.keras.optimizers.Adam()
-    loss_mean = tf.keras.metrics.Mean()
-
-    for epoch in range(1, EPOCHS + 1):
-        print(f'\nPixelCNN - Epoch {epoch}')
-
-        # train
-        prog = Progbar(train_size / BATCH_SIZE)
-        for step, input in enumerate(train_dataset):
-            loss = training_step(input, pixel_cnn, adam, pixelcnn_loss)
-            # logits = pixel_cnn(input)
-            # with file_writer.as_default():
-            #    tf.summary.image('input', input[0][tf.newaxis, ...], step=step+1)
-            #    tf.summary.histogram('input_hist', input[0, :, :, 0], step=step+1)
-            #    tf.summary.image('prob', tf.nn.sigmoid(logits)[0][tf.newaxis, ...], step=step+1)
-            #    tf.summary.histogram('prob_hist', tf.nn.sigmoid(logits)[0, :, :, 0], step=step+1)
-            loss_mean(loss)
-            prog.update(step, [('loss', loss)])
-        print(f'Train loss: {loss_mean.result().numpy()}')
-        loss_mean.reset_states()
-
-        # test
-        prog = Progbar(train_size / BATCH_SIZE)
-        for step, input in enumerate(test_dataset):
-            loss = pixelcnn_loss(input, pixel_cnn)
-            loss_mean(loss)
-            prog.update(step, [('loss', loss)])
-        print(f'Test loss: {loss_mean.result().numpy()}')
-        loss_mean.reset_states()
-
-        # sample = pixel_cnn.sample()
-        # with file_writer.as_default():
-        #     tf.summary.image('sample', sample, step=epoch)
-        #     tf.summary.histogram('sample_hist', sample, step=epoch)
+# if __name__ == '__main__':
+#     IMAGE_SIZE = 28
+#     FEATURE_MAPS = 16
+#     OUTPUT_MAPS = 2
+#     DEPTH = 4
+#     EPOCHS = 10
+#     BATCH_SIZE = 1024
+#     BUFFER_SIZE = 60000
+#
+#     now = datetime.now()
+#     timestamp = str(now.strftime("%Y%m%d_%H-%M-%S"))
+#     SAVE_FILE = './checkpoints/pixelcnn_' + timestamp
+#     TENSORBOARD_DIR = './tensorboard/' + timestamp
+#
+#     # file_writer = tf.summary.create_file_writer(TENSORBOARD_DIR)
+#     train_dataset, test_dataset, train_size, test_size = get_binarized_mnist(BATCH_SIZE, BUFFER_SIZE)
+#
+#     pixel_cnn = PixelCNN(IMAGE_SIZE, DEPTH, FEATURE_MAPS, OUTPUT_MAPS)
+#     adam = tf.keras.optimizers.Adam()
+#     loss_mean = tf.keras.metrics.Mean()
+#
+#     for epoch in range(1, EPOCHS + 1):
+#         print(f'\nPixelCNN - Epoch {epoch}')
+#
+#         # train
+#         prog = Progbar(train_size / BATCH_SIZE)
+#         for step, input in enumerate(train_dataset):
+#             loss = training_step(input, pixel_cnn, adam, pixelcnn_loss)
+#             # logits = pixel_cnn(input)
+#             # with file_writer.as_default():
+#             #    tf.summary.image('input', input[0][tf.newaxis, ...], step=step+1)
+#             #    tf.summary.histogram('input_hist', input[0, :, :, 0], step=step+1)
+#             #    tf.summary.image('prob', tf.nn.sigmoid(logits)[0][tf.newaxis, ...], step=step+1)
+#             #    tf.summary.histogram('prob_hist', tf.nn.sigmoid(logits)[0, :, :, 0], step=step+1)
+#             loss_mean(loss)
+#             prog.update(step, [('loss', loss)])
+#         print(f'Train loss: {loss_mean.result().numpy()}')
+#         loss_mean.reset_states()
+#
+#         # test
+#         prog = Progbar(train_size / BATCH_SIZE)
+#         for step, input in enumerate(test_dataset):
+#             loss = pixelcnn_loss(input, pixel_cnn)
+#             loss_mean(loss)
+#             prog.update(step, [('loss', loss)])
+#         print(f'Test loss: {loss_mean.result().numpy()}')
+#         loss_mean.reset_states()
+#
+#         # sample = pixel_cnn.sample()
+#         # with file_writer.as_default():
+#         #     tf.summary.image('sample', sample, step=epoch)
+#         #     tf.summary.histogram('sample_hist', sample, step=epoch)
