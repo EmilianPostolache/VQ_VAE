@@ -1,3 +1,3 @@
-# An implementation of VQ_VAE
+# An implementation of VQ-VAE
 
 Looking for implementing VQ-VAE-2
